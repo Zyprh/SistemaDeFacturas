@@ -15,7 +15,7 @@ $productosSeleccionados = isset($_POST['productos']) ? $_POST['productos'] : [];
 if (empty($productosSeleccionados)) {
     die("Debe seleccionar al menos un producto.");
 }
-
+//
 // Obtener los datos del cliente
 $cliente = $crud->getClientePorNombre($clienteNombre);
 
@@ -127,7 +127,6 @@ foreach ($productosSeleccionados as $productoNombre) {
             ?>
         </tbody>
     </table>
-
     <p class="total">Total: $<?php echo number_format($total, 2); ?></p>
 
     <div class="buttons">
