@@ -1,127 +1,194 @@
 <?php
 
-require_once 'Cliente.php';
-require_once 'Producto.php';
+require_once 'DB/db.php';
+require_once 'clases/Cliente.php';
+require_once 'clases/Producto.php';
+require_once 'clases/Factura.php'; // Asegúrate de incluir la clase Factura
 
 class Crud {
-    private $clientes = [];
-    private $productos = [];
+    private $db;
+    private $conn; // Definir la propiedad conn
 
     public function __construct() {
-        // Asegúrate de que la sesión esté iniciada
-        if (session_status() == PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        // Cargar clientes y productos de la sesión si existen
-        if (isset($_SESSION['clientes'])) {
-            foreach ($_SESSION['clientes'] as $clienteData) {
-                if (is_string($clienteData)) {
-                    $this->clientes[] = unserialize($clienteData); // Deserializa correctamente
-                }
-            }
-        }
-        
-        if (isset($_SESSION['productos'])) {
-            foreach ($_SESSION['productos'] as $productoData) {
-                if (is_string($productoData)) { // Asegúrate de que sea una cadena
-                    $this->productos[] = unserialize($productoData);
-                }
-            }
-        }
+        $this->db = new Database();
+        $this->conn = $this->db->getConnection(); 
     }
-    
-    public function agregarCliente(Cliente $cliente) {
-        if ($this->getClientePorNombre($cliente->getNombre()) === null) {
-            $this->clientes[] = $cliente;
-            $_SESSION['clientes'][] = serialize($cliente); // Asegúrate de serializar
+    public function getDatabase() {
+        return $this->db; // Agregar un método para acceder a la instancia de Database
+    }
+
+    // Ejemplo de un método que verifica la conexión
+    public function verificarConexion() {
+        if ($this->conn) {
+            echo "Conexión exitosa";
+        } else {
+            echo "Error en la conexión";
         }
     }
 
+    // Métodos para Clientes
     public function listarClientes() {
-        return $this->clientes;
+        $query = "SELECT * FROM clientes"; 
+        return $this->db->executeQuery($query);
     }
 
-    public function eliminarCliente($nombre) {
-        foreach ($this->clientes as $key => $cliente) {
-            if ($cliente->getNombre() === $nombre) {
-                unset($this->clientes[$key]);
-                $this->clientes = array_values($this->clientes); // Reindexar el array
-                $_SESSION['clientes'] = array_map('serialize', $this->clientes); // Actualizar la sesión
-                return true; // Retorna true cuando se elimina correctamente
-            }
-        }
-        return false; // Si no se encuentra el cliente, retorna false
-    }
-
-    public function getClientePorNombre($nombre) {
-        foreach ($this->clientes as $cliente) {
-            if ($cliente->getNombre() === $nombre) {
-                return $cliente;
-            }
-        }
-        return null; // Si no se encuentra el cliente
-    }
-
-    public function agregarProducto(Producto $producto) {
-        if ($this->getProductoPorNombre($producto->getNombre()) === null) {
-            $this->productos[] = $producto;
-            $_SESSION['productos'][] = serialize($producto); // Asegúrate de serializar
-        }
-    }
-
-    public function listarProductos() {
-        return $this->productos;
-    }
-
-    public function eliminarProducto($nombre) {
-        foreach ($this->productos as $key => $producto) {
-            if ($producto->getNombre() === $nombre) {
-                unset($this->productos[$key]);
-                $this->productos = array_values($this->productos); // Reindexar el array
-                
-                // Actualizar la sesión después de eliminar
-                $_SESSION['productos'] = array_map('serialize', $this->productos); 
-                
-                // Mensaje de éxito
-                echo "Producto eliminado: " . $nombre . "<br>";
-                
-                return true; // Retorna true si se elimina correctamente
-            }
-        }
-        
-        // Si no encuentra el producto
-        echo "Producto no encontrado: " . $nombre . "<br>";
-        
-        return false; // Retorna false si no se encontró
-    }
-
-    public function getProductoPorNombre($nombre) {
-        foreach ($this->productos as $producto) {
-            if ($producto->getNombre() === $nombre) {
-                return $producto;
-            }
-        }
-        return null; // Si no se encuentra el producto
-    }
-
-    public function calcularTotalFactura($productos) {
-        $total = 0;
-        foreach ($productos as $producto) {
-            $total += $producto->getPrecio();
-        }
-        return $total;
-    }
-
-    public function setClientes(array $clientes) {
-        $this->clientes = $clientes;
-        $_SESSION['clientes'] = array_map('serialize', $this->clientes); // Serializar para guardar en la sesión
+    public function agregarCliente($cliente) {
+        $query = "INSERT INTO clientes (nombre, apellidos, email, direccion, telefono, dni) VALUES (?, ?, ?, ?, ?, ?)";
+        $params = [
+            $cliente->getNombre(),
+            $cliente->getApellidos(),
+            $cliente->getEmail(),
+            $cliente->getDireccion(),
+            $cliente->getTelefono(),
+            $cliente->getDni()
+        ];
+        // Especificar tipos de parámetros
+        $types = 'ssssss'; // todos son strings
+        return $this->db->executeQuery($query, $params, $types);
     }
     
-    public function setProductos(array $productos) {
-        $this->productos = $productos;
-        $_SESSION['productos'] = array_map('serialize', $this->productos); // Serializar para guardar en la sesión
+    public function editarCliente($cliente) {
+        $query = "UPDATE clientes SET nombre = ?, apellidos = ?, direccion = ?, telefono = ? WHERE id = ?";
+        $params = [
+            $cliente->getNombre(),
+            $cliente->getApellidos(),
+            $cliente->getDireccion(),
+            $cliente->getTelefono(),
+            $cliente->getId()
+        ];
+        $types = 'ssssi'; // cuatro strings y un entero
+        return $this->db->executeQuery($query, $params, $types);
     }
+    
+    public function eliminarCliente($id) {
+        $query = "DELETE FROM clientes WHERE id = ?";
+        return $this->db->executeQuery($query, [$id], 'i'); // solo un entero
+    }
+
+    public function getClientePorId($cliente_id) {
+        if (!$cliente_id) {
+            throw new Exception("Error: Cliente ID es nulo.");
+        }
+    
+        $query = "SELECT id, nombre FROM clientes WHERE id = ?";
+        $stmt = $this->db->getConnection()->prepare($query);
+        $stmt->bind_param("i", $cliente_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        return $result->fetch_assoc(); // Devuelve el cliente o null si no existe
+    }
+      
+
+    // Métodos para Productos
+    public function listarProductos() {
+        $query = "SELECT * FROM productos"; 
+        return $this->db->executeQuery($query);
+    }
+
+    public function agregarProducto($producto) {
+        $query = "INSERT INTO productos (nombre, descripcion, precio, stock, categoria, codigo) VALUES (?, ?, ?, ?, ?, ?)";
+        $params = [
+            $producto->getNombre(),
+            $producto->getDescripcion(),
+            $producto->getPrecio(),
+            $producto->getStock(),
+            $producto->getCategoria(),
+            $producto->getCodigo()
+        ];
+        $types = 'ssddss'; // dos strings, dos doubles y dos strings
+        return $this->db->executeQuery($query, $params, $types);
+    }
+
+    public function editarProducto($producto) {
+        $query = "UPDATE productos SET nombre = ?, descripcion = ?, precio = ?, stock = ?, categoria = ?, codigo = ? WHERE id = ?";
+        $params = [
+            $producto->getNombre(),
+            $producto->getDescripcion(),
+            $producto->getPrecio(),
+            $producto->getStock(),
+            $producto->getCategoria(),
+            $producto->getCodigo(),
+            $producto->getId()
+        ];
+        $types = 'ssddssi'; // dos strings, dos doubles, dos strings y un entero
+        return $this->db->executeQuery($query, $params, $types);
+    }
+
+    public function eliminarProducto($id) {
+        $query = "DELETE FROM productos WHERE id = ?";
+        return $this->db->executeQuery($query, [$id], 'i'); // solo un entero
+    }
+
+    public function getProductoPorId($id) {
+        $query = "SELECT * FROM productos WHERE id = ?";
+        $productos = $this->db->executeQuery($query, [$id], 'i'); // solo un entero
+        return !empty($productos) ? $productos[0] : null; 
+    }
+
+    // Métodos para Facturas
+    public function listarFacturas() {
+        $query = "SELECT facturas.id, clientes.nombre AS cliente_nombre, facturas.fecha, facturas.total, facturas.tipo_documento 
+                  FROM facturas 
+                  JOIN clientes ON facturas.cliente_id = clientes.id";
+        return $this->db->executeQuery($query);
+    }
+
+    public function agregarFactura(Factura $factura, $productos_json, $cantidad_total, $total) {
+        $cliente_id = $factura->getCliente()->getId();
+        $tipo_documento = $factura->getTipoDocumento();
+        $fecha = date('Y-m-d H:i:s'); // Agregar la fecha actual
+    
+        $stmt = $this->conn->prepare("INSERT INTO facturas (cliente_id, fecha, total, tipo_documento, productos, cantidad_total, precio_total) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("issssdi", $cliente_id, $fecha, $total, $tipo_documento, $productos_json, $cantidad_total, $total);
+        
+        if ($stmt->execute()) {
+            return $stmt->insert_id;
+        } else {
+            return false;
+        }
+    }
+            
+    public function editarFactura($factura) {
+        $query = "UPDATE facturas SET cliente_id = ?, fecha = ?, total = ?, tipo_documento = ? WHERE id = ?";
+        $params = [
+            $factura->getClienteId(),
+            $factura->getFecha(),
+            $factura->getTotal(),
+            $factura->getTipoDocumento(),
+            $factura->getId()
+        ];
+        $types = 'isssi'; // un entero y cuatro strings
+        return $this->db->executeQuery($query, $params, $types);
+    }
+
+    public function eliminarFactura($id) {
+        $query = "DELETE FROM facturas WHERE id = ?";
+        return $this->db->executeQuery($query, [$id], 'i'); // solo un entero
+    }
+
+    public function getFacturaPorId($id) {
+        $query = "SELECT * FROM facturas WHERE id = ?";
+        $facturas = $this->db->executeQuery($query, [$id], 'i'); // solo un entero
+        return !empty($facturas) ? $facturas[0] : null; 
+    }
+
+    // Método para obtener clientes
+    public function obtenerClientes() {
+        $query = "SELECT id, nombre FROM clientes"; // Asegúrate de que la tabla clientes tenga estos campos
+        return $this->db->executeQuery($query);
+    }
+
+    // Método para obtener productos
+    public function obtenerProductos() {
+        $query = "SELECT id, nombre, precio, stock FROM productos"; // Asegúrate de seleccionar los campos correctos
+        return $this->db->executeQuery($query); // Llama al método de ejecución de consultas
+    }
+    public function actualizarStockProducto($producto_id, $nuevo_stock) {
+        $stmt = $this->conn->prepare("UPDATE productos SET stock = ? WHERE id = ?");
+        $stmt->bind_param("ii", $nuevo_stock, $producto_id);
+        return $stmt->execute();
+    }
+    
 }
 
 ?>
