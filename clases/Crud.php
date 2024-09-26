@@ -149,7 +149,7 @@ class Crud {
     }
     
         
-    public function editarFactura($factura) {
+    /*public function editarFactura($factura) {
         $query = "UPDATE facturas SET cliente_id = ?, fecha = ?, total = ?, tipo_documento = ? WHERE id = ?";
         $params = [
             $factura->getClienteId(),
@@ -160,7 +160,7 @@ class Crud {
         ];
         $types = 'isssi'; // un entero y cuatro strings
         return $this->db->executeQuery($query, $params, $types);
-    }
+    }*/
 
     public function eliminarFactura($id) {
         $query = "DELETE FROM facturas WHERE id = ?";
