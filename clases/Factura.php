@@ -4,7 +4,7 @@ require_once 'Producto.php';
 
 class Factura {
     private $id; // ID de la factura
-    private $cliente; // ID del cliente
+    private $cliente; // Objeto Cliente
     private $productos = []; // Arreglo de productos
     private $fecha; // Fecha de la factura
     private $tipo_documento; // Tipo de documento
@@ -20,10 +20,6 @@ class Factura {
     public function getClienteId() {
         return $this->cliente->getId(); // Método para obtener el ID del cliente
     }
-    
-    public function setProductos(){
-        return $this->productos;
-    }
 
     // Métodos set y get
     public function getId() {
@@ -37,6 +33,9 @@ class Factura {
     public function setFecha($fecha) {
         $this->fecha = $fecha; // Establecer la fecha
     }
+    public function setProductos($productos) {
+        $this->productos = $productos; // Establecer la fecha
+    }
 
     public function setTipoDocumento($tipo_documento) {
         $this->tipo_documento = $tipo_documento; // Establecer el tipo de documento
@@ -47,7 +46,7 @@ class Factura {
     }
 
     public function getCliente() {
-        return $this->cliente; // Obtener el ID del cliente
+        return $this->cliente; // Obtener el objeto Cliente
     }
 
     public function getFecha() {
@@ -66,34 +65,37 @@ class Factura {
         return $this->total; // Retornar el total almacenado
     }
 
-    // Agregar producto a la factura
-    public function agregarProducto(Producto $producto, $cantidad) {
-        // Almacena el objeto Producto y la cantidad
-        $this->productos[] = [
-            'producto' => $producto,
-            'cantidad' => $cantidad
-        ];
-    }
+        // Agregar producto a la factura
+        public function agregarProducto(Producto $producto, $cantidad) {
+            $this->productos[] = [
+                'id' => $producto->getId(), 
+                'nombre' => $producto->getNombre(), // Agregar el nombre del producto
+                'cantidad' => $cantidad,
+                'precio' => $producto->getPrecio(), // Agregar precio aquí
+            ]; 
+        }
+
+    
 
     // Calcular total de la factura
     public function calcularTotal() {
         $total = 0;
         foreach ($this->productos as $item) {
-            $total += $item['producto']->getPrecio() * $item['cantidad'];
+            $total += $item['precio'] * $item['cantidad']; // Calcular correctamente el total
         }
-        return $total;
+        $this->total = $total; // Actualiza el total en el objeto
+        return $this->total;
     }
-    
 
     // Mostrar la factura completa
     public function mostrarFactura() {
-        echo "Cliente ID: " . $this->cliente . "<br>"; // Usar el ID del cliente directamente
+        echo "Cliente ID: " . $this->cliente->getId() . "<br>"; // Usar el ID del cliente
         echo "Fecha: " . $this->fecha . "<br>";
         echo "Tipo de Documento: " . $this->tipo_documento . "<br>";
         echo "Productos: <br>";
 
         foreach ($this->productos as $item) {
-            echo "Nombre: " . $item['producto']->getNombre() . " | Precio: $" . number_format($item['producto']->getPrecio(), 2) . " | Cantidad: " . $item['cantidad'] . "<br>";
+            echo "ID: " . $item['id'] . " | Precio: $" . number_format($item['precio'], 2) . " | Cantidad: " . $item['cantidad'] . "<br>";
         }
 
         echo "Total: $" . number_format($this->total, 2) . "<br>"; // Usar $this->total

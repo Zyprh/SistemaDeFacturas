@@ -56,7 +56,7 @@ if (isset($_POST['agregar'])) {
 <body>
 
 <!-- Incluir el navbar -->
-<?php include 'index.php'; ?>
+<?php include 'navbar.php'; ?>
 
 <div class="container mt-4">
     <h3>Listado de Clientes</h3>
@@ -92,11 +92,13 @@ if (isset($_POST['agregar'])) {
                         <td><?php echo $cliente['telefono']; ?></td>
                         <td><?php echo $cliente['dni']; ?></td>
                         <td>
-                            <form method="POST" style="display:inline;">
-                                <input type="hidden" name="id" value="<?php echo $cliente['id']; ?>">
-                                <button type="submit" name="eliminar" class="btn btn-danger btn-sm">Eliminar</button>
-                            </form>
-                            <button class="btn btn-warning btn-sm" onclick="prepararEdicion(<?php echo $cliente['id']; ?>, '<?php echo $cliente['nombre']; ?>', '<?php echo $cliente['apellidos']; ?>', '<?php echo $cliente['email']; ?>', '<?php echo $cliente['direccion']; ?>', '<?php echo $cliente['telefono']; ?>', '<?php echo $cliente['dni']; ?>')">Editar</button>
+                            <div class="d-flex justify-content-center">
+                                <form method="POST" style="margin-right: 5px;">
+                                    <input type="hidden" name="id" value="<?php echo $cliente['id']; ?>">
+                                    <button type="submit" name="eliminar" class="btn btn-danger btn-sm">Eliminar</button>
+                                </form>
+                                <button class="btn btn-warning btn-sm" onclick="prepararEdicion(<?php echo $cliente['id']; ?>, '<?php echo $cliente['nombre']; ?>', '<?php echo $cliente['apellidos']; ?>', '<?php echo $cliente['email']; ?>', '<?php echo $cliente['direccion']; ?>', '<?php echo $cliente['telefono']; ?>', '<?php echo $cliente['dni']; ?>')">Editar</button>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>

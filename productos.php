@@ -56,7 +56,7 @@ if (isset($_POST['agregar'])) {
 <body>
 
 <!-- Incluir el navbar -->
-<?php include 'index.php'; ?>
+<?php include 'navbar.php'; ?>
 
 <div class="container mt-4">
     <h3>Listado de Productos</h3>
@@ -118,6 +118,7 @@ if (isset($_POST['agregar'])) {
             </div>
             <div class="modal-body">
                 <form id="formProducto" method="POST">
+                    <input type="hidden" id="productoId" name="productoId"> <!-- Campo oculto para el ID -->
                     <div class="form-group">
                         <label for="nombre">Nombre</label>
                         <input type="text" class="form-control" id="nombre" name="nombre" required>

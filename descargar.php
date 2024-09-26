@@ -1,81 +1,122 @@
 <?php
-session_start();
-require_once 'clases/Cliente.php';
-require_once 'clases/Producto.php';
+require_once 'DB/db.php';
 require_once 'clases/Crud.php';
 require_once 'clases/Factura.php';
+require_once 'clases/Cliente.php';
+require_once 'clases/Producto.php';
 require('fpdf/fpdf.php');
 
 $crud = new Crud();
 
-// Recuperar datos del formulario
-$clienteNombre = $_POST['cliente'];
-$productosSeleccionados = explode(',', $_POST['productos']); 
-$tipoDocumento = $_POST['tipo_documento']; 
+if (isset($_GET['id'])) {
+    $facturaId = $_GET['id'];
 
-$cliente = $crud->getClientePorNombre($clienteNombre);
-
-// Crear una nueva factura
-$factura = new Factura($cliente);
-
-// Agregar productos a la factura
-foreach ($productosSeleccionados as $productoNombre) {
-    $producto = $crud->getProductoPorNombre(trim($productoNombre));
-    if ($producto) {
-        $factura->agregarProducto($producto);
+    // Obtener los datos de la factura por ID
+    $factura = $crud->getFacturaPorId($facturaId);
+    if (!$factura) {
+        die('Error: Factura no encontrada.');
     }
+
+    // Obtener detalles del cliente
+    $cliente = $crud->getClientePorId($factura['cliente_id']);
+    if (!$cliente) {
+        die('Error: Cliente no encontrado.');
+    }
+
+    // Decodificar los productos de la factura desde JSON
+    $productos = json_decode($factura['productos'], true);
+    if (empty($productos)) {
+        die('Error: No se encontraron productos para esta factura.');
+    }
+
+    // Comenzar a crear el PDF
+    ob_start();
+    $pdf = new FPDF('L', 'mm', 'A4');  // 'L' indica el formato horizontal (landscape)
+    $pdf->AddPage();
+    $pdf->SetMargins(15, 15, 15);
+    $pdf->SetAutoPageBreak(true, 20);
+
+    // Logo de la empresa ficticia en la esquina derecha (asegúrate de tener el archivo logo.png en la carpeta indicada)
+    $pdf->Image('img/logo2.png', 250, 10, 30);  // X=250 ajusta el logo a la derecha, Y=10 ajusta la altura, tamaño=30
+
+    // Título
+    $pdf->SetFont('Helvetica', 'B', 24);
+    $pdf->SetTextColor(33, 150, 243);  // Azul corporativo
+    $pdf->Cell(0, 15, iconv('UTF-8', 'ISO-8859-1', ($factura['tipo_documento'] == 'factura' ? 'Factura de Venta' : 'Boleta de Venta')), 0, 1, 'C');
+    $pdf->Ln(10);
+
+    // Información del cliente
+    $nombreCliente = isset($cliente['nombre']) ? $cliente['nombre'] : 'Nombre desconocido';
+    $apellidosCliente = isset($cliente['apellidos']) && !empty($cliente['apellidos']) ? $cliente['apellidos'] : 'Sin apellidos';
+    $emailCliente = isset($cliente['email']) ? $cliente['email'] : 'Email no registrado';
+    $dniCliente = isset($cliente['dni']) ? $cliente['dni'] : 'DNI no registrado';
+
+    $pdf->SetFont('Helvetica', '', 14);
+    $pdf->SetTextColor(0);
+    $pdf->Cell(0, 10, iconv('UTF-8', 'ISO-8859-1', "Cliente: {$nombreCliente} {$apellidosCliente}"), 0, 1, 'L');
+    $pdf->Cell(0, 10, iconv('UTF-8', 'ISO-8859-1', "Email: {$emailCliente}"), 0, 1, 'L');
+    $pdf->Cell(0, 10, iconv('UTF-8', 'ISO-8859-1', "DNI: {$dniCliente}"), 0, 1, 'L');
+
+    // Fecha de emisión
+    $fechaEmision = date('d/m/Y', strtotime($factura['fecha']));
+    $pdf->Cell(0, 10, iconv('UTF-8', 'ISO-8859-1','Fecha de Emisión: ') . iconv('UTF-8', 'ISO-8859-1', $fechaEmision), 0, 1, 'L');
+    $pdf->Ln(5);
+
+    // Encabezado de la tabla de productos con estilo
+    $pdf->SetFont('Helvetica', 'B', 12);
+    $pdf->SetFillColor(60, 179, 113);  // Color verde claro para el encabezado
+    $pdf->SetTextColor(255);  // Texto blanco
+
+    $pdf->Cell(110, 12, 'Producto', 1, 0, 'L', true);  // Hacemos la columna de producto más ancha
+    $pdf->Cell(40, 12, 'Cantidad', 1, 0, 'C', true);
+    $pdf->Cell(50, 12, 'Precio Unitario (S/.)', 1, 0, 'C', true);
+    $pdf->Cell(50, 12, 'Total (S/.)', 1, 1, 'C', true);
+
+    // Detalles de productos con alternancia de colores
+    $pdf->SetFont('Helvetica', '', 12);
+    $totalGeneral = 0;
+    $fill = false;  // Variable para alternar color de fondo
+
+    foreach ($productos as $producto) {
+        if (!isset($producto['id'], $producto['cantidad'])) {
+            die('Error: El producto no tiene ID o cantidad.');
+        }
+
+        // Obtener detalles del producto usando su ID
+        $productoDetalles = $crud->getProductoPorId($producto['id']);
+        if (!$productoDetalles) {
+            die('Error: Producto no encontrado.');
+        }
+
+        $nombreProducto = isset($productoDetalles['nombre']) ? $productoDetalles['nombre'] : 'Producto desconocido';
+        $precioProducto = isset($productoDetalles['precio']) ? $productoDetalles['precio'] : 0;
+        $cantidad = (int)$producto['cantidad'];
+
+        $totalProducto = $precioProducto * $cantidad;
+        $totalGeneral += $totalProducto;
+
+        // Alternancia de color en las filas
+        $pdf->SetFillColor(240, 240, 240);  // Color gris claro para alternar filas
+        $pdf->SetTextColor(0);  // Texto negro
+
+        $pdf->Cell(110, 12, iconv('UTF-8', 'ISO-8859-1', $nombreProducto), 1, 0, 'L', $fill);  // Producto
+        $pdf->Cell(40, 12, $cantidad, 1, 0, 'C', $fill);  // Cantidad
+        $pdf->Cell(50, 12, 'S/. ' . number_format($precioProducto, 2), 1, 0, 'C', $fill);  // Precio unitario
+        $pdf->Cell(50, 12, 'S/. ' . number_format($totalProducto, 2), 1, 1, 'C', $fill);  // Total
+
+        $fill = !$fill;  // Alterna el color de fondo para la siguiente fila
+    }
+
+    // Total general con estilo
+    $pdf->SetFont('Helvetica', 'B', 14);
+    $pdf->SetFillColor(60, 179, 113);  // Verde claro para el total
+    $pdf->SetTextColor(255);  // Texto blanco
+    $pdf->Cell(200, 12, 'Total General', 1, 0, 'R', true);
+    $pdf->Cell(50, 12, 'S/. ' . number_format($totalGeneral, 2), 1, 1, 'C', true);
+
+    // Salida del PDF
+    $pdf->Output('D', "factura_{$facturaId}.pdf");
+    ob_end_flush();
+} else {
+    die('Error: ID de factura no proporcionado.');
 }
-
-// Crear un nuevo PDF
-$pdf = new FPDF();
-$pdf->AddPage();
-$pdf->SetMargins(15, 15, 15);
-$pdf->SetAutoPageBreak(true, 20);
-$pdf->SetFont('Arial', 'B', 20);
-$pdf->SetTextColor(33, 150, 243);
-
-// Título del documento
-$pdf->Cell(0, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', ($tipoDocumento == 'factura' ? 'Factura de Venta' : 'Boleta de Venta')), 0, 1, 'C');
-$pdf->Ln(10);
-
-// Información del cliente
-$pdf->SetFont('Arial', '', 12);
-$pdf->SetTextColor(0);
-$pdf->Cell(0, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', "Cliente: $clienteNombre"), 0, 1, 'L');
-$pdf->Cell(0, 10, 'Fecha de Emision: ' . date('d/m/Y'), 0, 1, 'L');
-$pdf->Ln(5);
-
-// Encabezado de tabla de productos
-$pdf->SetFont('Arial', 'B', 12);
-$pdf->SetFillColor(230, 230, 230);
-$pdf->Cell(100, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', 'Producto'), 1, 0, 'L', true);
-$pdf->Cell(40, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', 'Precio Unitario'), 1, 0, 'C', true);
-$pdf->Cell(40, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', 'Total'), 1, 1, 'C', true);
-
-// Productos
-$pdf->SetFont('Arial', '', 12);
-$total = 0;
-foreach ($factura->getProductos() as $producto) {
-    $precio = $producto->getPrecio();
-    $pdf->Cell(100, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', $producto->getNombre()), 1, 0);
-    $pdf->Cell(40, 10, '$' . number_format($precio, 2), 1, 0, 'C');
-    $pdf->Cell(40, 10, '$' . number_format($precio, 2), 1, 1, 'C');
-    $total += $precio;
-}
-
-// Total
-$pdf->Ln(5);
-$pdf->SetFont('Arial', 'B', 12);
-$pdf->Cell(140, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', 'Total a Pagar: '), 1, 0, 'R');
-$pdf->Cell(40, 10, '$' . number_format($total, 2), 1, 1, 'C');
-
-// Pie de página
-$pdf->Ln(10);
-$pdf->SetFont('Arial', 'I', 10);
-$pdf->Cell(0, 10, iconv('UTF-8', 'ISO-8859-1//TRANSLIT', 'Gracias por su compra!'), 0, 1, 'C');
-
-// Guardar el archivo PDF
-$pdfFileName = ($tipoDocumento == 'factura' ? "factura_" : "boleta_") . time() . ".pdf";
-$pdf->Output('D', $pdfFileName); // Descarga el archivo
-exit();
-?>

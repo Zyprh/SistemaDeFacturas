@@ -70,7 +70,7 @@ class Crud {
             throw new Exception("Error: Cliente ID es nulo.");
         }
     
-        $query = "SELECT id, nombre FROM clientes WHERE id = ?";
+        $query = "SELECT id, nombre, apellidos, email, dni FROM clientes WHERE id = ?";
         $stmt = $this->db->getConnection()->prepare($query);
         $stmt->bind_param("i", $cliente_id);
         $stmt->execute();
@@ -147,7 +147,8 @@ class Crud {
             return false;
         }
     }
-            
+    
+        
     public function editarFactura($factura) {
         $query = "UPDATE facturas SET cliente_id = ?, fecha = ?, total = ?, tipo_documento = ? WHERE id = ?";
         $params = [
@@ -188,7 +189,45 @@ class Crud {
         $stmt->bind_param("ii", $nuevo_stock, $producto_id);
         return $stmt->execute();
     }
+
+    public function getProductosPorFactura($facturaId) {
+        // Obtener la factura
+        $query = "SELECT productos FROM facturas WHERE id = ?";
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $facturaId);
+        $stmt->execute();
     
+        // Obtener el resultado
+        $result = $stmt->get_result();
+        $factura = $result->fetch_assoc();
+        
+        // Decodificar JSON si existe
+        if (!empty($factura['productos'])) {
+            $productosArray = json_decode($factura['productos'], true);
+    
+            // Aquí recorremos cada producto y agregamos el nombre y precio
+            foreach ($productosArray as &$producto) {
+                // Accedemos al ID del producto
+                $productoId = $producto['id']; // Ahora usamos 'id' en lugar de 'producto_id'
+                $productoDetails = $this->getProductoPorId($productoId); // Obtener detalles del producto
+    
+                // Agregar detalles del producto a la estructura
+                if ($productoDetails) {
+                    $producto['nombre'] = $productoDetails['nombre'];
+                    $producto['precio'] = $productoDetails['precio'];
+                } else {
+                    $producto['nombre'] = 'Producto desconocido';
+                    $producto['precio'] = 0;
+                }
+            }
+            
+            return $productosArray; // Devuelve el array modificado
+        }
+        
+        return []; // Devuelve un array vacío si no hay productos
+    }
+    
+
 }
 
 ?>

@@ -12,7 +12,6 @@ $facturas = $crud->listarFacturas();
 $clientes = $crud->obtenerClientes();
 $productosDisponibles = $crud->obtenerProductos();
 
-// Lógica para agregar la factura
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['agregar'])) {
         $cliente_id = $_POST['cliente_id'];
@@ -32,7 +31,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     if ($producto_data) {
                         // Verifica si hay suficiente stock
                         if ($producto_data['stock'] >= $data['cantidad']) {
-                            $producto = new Producto($producto_data['id'], $producto_data['nombre'], $producto_data['precio'], $producto_data['stock']);
+                            $producto = new Producto(
+                                $producto_data['nombre'],
+                                $producto_data['descripcion'],
+                                $producto_data['precio'],
+                                $producto_data['stock'],
+                                $producto_data['categoria'],
+                                $producto_data['codigo'],
+                                $producto_data['id'] // Asegúrate de pasar el ID correcto
+                            );
+
+                            // Agregar producto a la lista
                             $productos[] = ['producto' => $producto, 'cantidad' => $data['cantidad']];
                             $cantidad_total += $data['cantidad'];
                             $precio_total += $data['cantidad'] * $producto->getPrecio();
@@ -59,34 +68,36 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Crear la factura y establecer los valores
         $factura = new Factura(new Cliente($cliente_id), $tipo_documento);
         $factura->setFecha(date('Y-m-d H:i:s')); // Usar la fecha actual
-        $factura->setProductos($productos);
-        $factura->setTotal($precio_total);
+
+        // Agregar productos a la factura
+        foreach ($productos as $item) {
+            $factura->agregarProducto($item['producto'], $item['cantidad']);
+        }
+
+        $factura->setTotal($precio_total); // Establecer el total después de agregar productos
 
         // Convertir productos a formato JSON para almacenarlos
-        $productos_json = json_encode($productos);
+        $productos_json = json_encode(array_map(function($item) {
+            return [
+                'id' => $item['producto']->getId(),
+                'nombre' => $item['producto']->getNombre(),
+                'cantidad' => $item['cantidad'],
+                'precio' => $item['producto']->getPrecio(),
+            ];
+        }, $productos));
 
         // Intentar agregar la factura
         $factura_id = $crud->agregarFactura($factura, $productos_json, $cantidad_total, $precio_total);
-        if ($factura_id) {
-            echo "<script>alert('Factura agregada con éxito.');</script>";
-            echo "<script>window.location.href = 'facturas.php';</script>";
-        } else {
-            echo "Error: No se pudo agregar la factura.";
-        }
+        header("Location: facturas.php"); // Redirigir a la misma página
+        exit;
     }
 }
 
 // Para eliminar una factura
 if (isset($_POST['eliminar'])) {
-    $factura_id = $_POST['id'];
-    $eliminado = $crud->eliminarFactura($factura_id);
-    
-    if ($eliminado) {
-        echo "<script>alert('Factura eliminada con éxito.');</script>";
-        echo "<script>window.location.href = 'facturas.php';</script>";
-    } else {
-        echo "<script>alert('Error al eliminar la factura.');</script>";
-    }
+    $crud->eliminarFactura( $_POST['id']);
+    header("Location: facturas.php"); // Redirigir a la misma página
+    exit;
 }
 ?>
 
@@ -122,7 +133,7 @@ if (isset($_POST['eliminar'])) {
 <body>
 
 <!-- Incluir el navbar -->
-<?php include 'index.php'; ?>
+<?php include 'navbar.php'; ?>
 
 <div class="container mt-4">
     <h3 class="text-center">Listado de Facturas</h3>
@@ -153,12 +164,23 @@ if (isset($_POST['eliminar'])) {
                         <td><?php echo number_format($factura['total'], 2); ?></td>
                         <td><?php echo htmlspecialchars($factura['tipo_documento']); ?></td>
                         <td>
-                            <button class="btn btn-warning btn-sm" onclick="prepararEdicion(<?php echo $factura['id']; ?>)">Editar</button>
+                            <!-- Botón para eliminar la factura -->
                             <form method="POST" style="display:inline;">
                                 <input type="hidden" name="id" value="<?php echo $factura['id']; ?>">
                                 <button type="submit" name="eliminar" class="btn btn-danger btn-sm">Eliminar</button>
                             </form>
+
+                            <!-- Botón para descargar la factura -->
+                            <button class="btn btn-success btn-sm" onclick="window.location.href='descargar.php?id=<?php echo $factura['id']; ?>'">Descargar</button>
+
+
+                            <form method="POST" action="enviar_factura_correo.php" style="display:inline;" id="formEnviarFactura">
+                                <input type="hidden" name="factura_id" value="<?php echo $factura['id']; ?>">
+                                <input type="hidden" name="email_cliente" value="<?php echo $cliente['email']; ?>">
+                                <button type="button" class="btn btn-info btn-sm enviar-correo-btn">Enviar por Correo</button>
+                            </form>
                         </td>
+
                     </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -188,15 +210,12 @@ if (isset($_POST['eliminar'])) {
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Tipo de Documento</label>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="tipo_documento" value="factura" id="tipo_factura" required>
-                            <label class="form-check-label" for="tipo_factura">Factura</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="tipo_documento" value="boleta" id="tipo_boleta">
-                            <label class="form-check-label" for="tipo_boleta">Boleta</label>
-                        </div>
+                        <label for="tipo_documento">Tipo de Documento</label>
+                        <select class="form-control" id="tipo_documento" name="tipo_documento" required>
+                            <option value="">Seleccione tipo de documento</option>
+                            <option value="Factura">Factura</option>
+                            <option value="Boleta">Boleta</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Seleccionar Productos</label><br>
@@ -216,11 +235,44 @@ if (isset($_POST['eliminar'])) {
         </div>
     </div>
 </div>
+<script>
+$(document).ready(function() {
+    $('.enviar-correo-btn').on('click', function(event) {
+        event.preventDefault(); // Prevenir el comportamiento por defecto del botón
+        const form = $(this).closest('form'); // Encuentra el formulario más cercano
+        const formData = form.serialize(); // Obtener datos del formulario
+
+        $.ajax({
+            type: 'POST',
+            url: form.attr('action'), // URL del script que maneja el envío de correo
+            data: formData,
+            success: function(response) {
+                const result = JSON.parse(response);
+                if (result.success) {
+                    Swal.fire("Éxito", result.message, "success");
+                } else {
+                    Swal.fire("Error", result.message, "error");
+                }
+            },
+            error: function() {
+                Swal.fire("Error", "No se pudo enviar la factura por correo.", "error");
+            }
+        });
+    });
+});
+</script>
+
 
 <!-- Bootstrap JS y jQuery -->
-<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<!-- SweetAlert CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert/1.1.3/sweetalert.min.css">
+<!-- SweetAlert JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert/1.1.3/sweetalert.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <script>
 function toggleQuantityInput(productId) {
     const checkbox = document.getElementById(`producto-${productId}`);
